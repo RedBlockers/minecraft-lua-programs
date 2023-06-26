@@ -18,20 +18,58 @@ LTDItem = {
     --{name = 'hotdog', label = 'Hot-dog - VIP ~p~Diamond', price = 50},
 --}
 
+Citizen.CreateThread(function()
+    while ESX == nil do
+        TriggerEvent('modo:LeyRider', function(obj) ESX = obj end)
+        Citizen.Wait(1)
+    end
+end)
+
+local function compareItems(item1,item2)
+    return item1.label < item2.label
+end
+
+local function getListLengh(list)
+    i = 0
+    for _,__ in pairs(list) do
+        i = i + 1
+    end
+    return i
+end
+
+local function getCartPrice(cart)
+    price = 0
+    for _,v in pairs(cart) do
+        price = price + v.price*v.number
+    end
+    return price
+end
+
 
 function OpenMenuLtd()
+    local cartItems = {}
     local menu = RageUI.CreateMenu("", "Articles disponibles :")
+    local playerPed = GetPlayerPed(-1)
+    local playerCoords = GetEntityCoords(playerPed, true)
+    pos = playerCoords
+
+    print(playerPed, pos, playerCoords, GetDistanceBetweenCoords(playerCoords,pos,true))
 
     RageUI.Visible(menu, not RageUI.Visible(menu))
 
     while menu do
         Wait(0)
         RageUI.IsVisible(menu, function()
-
         for k,v in pairs(LTDItem) do
             RageUI.Button(v.label, nil, {RightLabel = "~p~".. v.price.."$"}, true, {
                 onSelected = function()
-                    OpenMenuPaiement(v.name, v.price)
+                    playerCoords = GetEntityCoords(playerPed, true)
+                    if GetDistanceBetweenCoords(playerCoords, pos, true) > 20 then
+                        RageUI.CloseAll()
+                        ESX.ShowNotification("~p~Vous êtes trop loin pour éffectuer cette action") 
+                        return
+                    end
+                    table.insert(cartItems,v)
                 end
             })
         end
@@ -59,6 +97,12 @@ function OpenMenuLtd()
                 end
             })
         end]]
+        RageUI.Separator()
+        RageUI.Button("Panier",nil,{},true,{
+            onSelected = function()
+                OpenMenuCart(pos,playerPed,cartItems)
+            end
+        })
         end, function()
         end)
 
@@ -68,7 +112,59 @@ function OpenMenuLtd()
     end
 end
 
-function OpenMenuPaiement(item, price)
+function OpenMenuCart(pos,playerPed,cartItems)
+    local menu = RageUI.CreateMenu("","Panier")
+    RageUI.Visible(menu,not RageUI.IsVisible(menu))
+    displayCartItems = {}
+    table.sort(cartItems, compareItems)
+    for _,item in pairs(cartItems) do
+        local label = item.label
+        if displayCartItems[label] then
+            displayCartItems[label].number = displayCartItems[label].number + 1
+        else
+            displayCartItems[label] ={ 
+                number = 1,
+                label = label,
+                name = item.name,
+                price = item.price,
+            }
+        end
+    end
+
+
+    while menu do
+        Wait(0)
+        RageUI.IsVisible(menu,function()
+            if getListLengh(displayCartItems) == 0 then
+                RageUI.Button("Le panier est vide",nil,{},false)
+            else
+                for k,v in pairs(displayCartItems) do
+                    RageUI.Button(v.label.." x"..v.number,nil,{RightLabel = "~p~".. v.price*v.number.."$"}, true, {
+                        onSelected = function()
+                            print()
+                            if v.number > 1 then
+                                displayCartItems[v.label].number = displayCartItems[v.label].number - 1 
+                            else
+                                displayCartItems[k] = nil
+                            end
+                        end
+                    })
+                end
+            end
+
+            RageUI.Separator()
+            if getListLengh(displayCartItems) ~= 0 then
+                RageUI.Button("Acheter",nil,{RightLabel = "~p~".. getCartPrice(displayCartItems).."$"},true,{
+                    onSelected = function()
+                        OpenMenuPaiement(pos,playerPed,displayCartItems)
+                    end
+                })
+            end
+        end)
+    end
+end
+
+function   OpenMenuPaiement(pos,playerPed,displayCartItems)
     local menu = RageUI.CreateMenu("", "Comment voulez vous payer ?")
 
     RageUI.Visible(menu, not RageUI.Visible(menu))
@@ -76,17 +172,37 @@ function OpenMenuPaiement(item, price)
     while menu do
         Wait(0)
         RageUI.IsVisible(menu, function()
-
         RageUI.Button('Payer en Liquide', nil, {}, true, {
             onSelected = function()
+                playerCoords = GetEntityCoords(playerPed, true)
+                print(GetDistanceBetweenCoords(playerCoords,pos,true), pos, playerCoords)
+                if GetDistanceBetweenCoords(playerCoords,pos,true) > 5 then
+                    RageUI.CloseAll()
+                    ESX.ShowNotification("~p~Vous êtes trop loin pour éffectuer cette action")
+                    return
+                end
                 RageUI.CloseAll()
-                AeroEvent('core:achat', item, price, 1)
+                for _, item in pairs(displayCartItems) do
+                    for i=1, item.number do
+                        AeroEvent('core:achat', item.name, item.price, 1)
+                    end
+                end
             end
         })
         RageUI.Button('Payer par Carte Bancaire', nil, {}, true, {
             onSelected = function()
+                playerCoords = GetEntityCoords(playerPed, true)
+                if GetDistanceBetweenCoords(playerCoords,pos,true) > 5 then
+                    RageUI.CloseAll()
+                    ESX.ShowNotification("~p~Vous êtes trop loin pour éffectuer cette action")
+                    return
+                end
                 RageUI.CloseAll()
-                AeroEvent('core:achat', item, price, 2)
+                for _, item in pairs(cartItems) do
+                    for i=1, item.number do
+                        AeroEvent('core:achat', item.name, item.price, 2)
+                    end
+                end
             end
         })
 
